@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Huffman File Compressor & Tree Visualizer | DSA Project</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-container">
+        <div class="logo-area">
+          <div class="logo-icon">🗜️</div>
+          <div>
+            <h1>Huffman Compressor & Visualizer</h1>
+            <p class="subtitle">Lossless Data Compression Engine powered by <strong>Min-Heap</strong> &amp; <strong>Binary Prefix Trees</strong></p>
+          </div>
+        </div>
+        <div class="header-badges">
+          <span class="badge badge-purple">DSA: Greedy + Heap</span>
+          <span class="badge badge-emerald">Lossless Bit Packing</span>
+          <span class="badge badge-blue">O(N log K)</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs-bar">
+        <button class="nav-tab active" data-tab="compressTab">
+          <span class="tab-icon">📦</span> Compress &amp; Analyze
+        </button>
+        <button class="nav-tab" data-tab="decompressTab">
+          <span class="tab-icon">📂</span> Decompress File
+        </button>
+        <button class="nav-tab" data-tab="visualizerTab">
+          <span class="tab-icon">🌳</span> Interactive Huffman Tree
+        </button>
+        <button class="nav-tab" data-tab="theoryTab">
+          <span class="tab-icon">📖</span> Algorithm &amp; Viva Guide
+        </button>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- TAB 1: COMPRESS -->
+      <section id="compressTab" class="tab-pane active">
+        <div class="grid-2col">
+          <!-- Input Card -->
+          <div class="card">
+            <div class="card-header">
+              <h2>1. Input Text or File</h2>
+              <div class="presets-row">
+                <span class="text-sm text-muted">Presets:</span>
+                <button class="btn-preset" data-preset="shakespeare">Shakespeare</button>
+                <button class="btn-preset" data-preset="repetitive">Repetitive (High %)</button>
+                <button class="btn-preset" data-preset="pangram">Pangram</button>
+                <button class="btn-preset" data-preset="code">JS Code</button>
+              </div>
+            </div>
+
+            <div class="card-body">
+              <div class="drop-zone" id="compressDropZone">
+                <span class="drop-icon">📄</span>
+                <p>Drag &amp; drop any text/code file here, or <label for="compressFileInput" class="link-label">browse files</label></p>
+                <input type="file" id="compressFileInput" style="display: none;">
+              </div>
+
+              <div class="form-group mt-3">
+                <label for="textInput">Or type/paste raw text below:</label>
+                <textarea id="textInput" rows="7" placeholder="Type or paste your text here..."></textarea>
+              </div>
+
+              <div class="btn-row">
+                <button id="btnCompress" class="btn btn-primary">
+                  ⚡ Compress Now
+                </button>
+                <button id="btnDownloadCompressed" class="btn btn-success" disabled>
+                  ⬇️ Download .huff Binary File
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Statistics & Metrics Card -->
+          <div class="card">
+            <div class="card-header">
+              <h2>2. Compression Analytics &amp; Metrics</h2>
+              <span class="badge badge-emerald">Real-time</span>
+            </div>
+            <div class="card-body">
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <span class="stat-label">Original Size</span>
+                  <span class="stat-value" id="statOriginalSize">-</span>
+                  <span class="stat-sub">8 bits/char (ASCII/UTF-8)</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Compressed Size</span>
+                  <span class="stat-value" id="statCompressedSize">-</span>
+                  <span class="stat-sub">Includes binary header</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Space Saved</span>
+                  <span class="stat-value text-success" id="statRatio">-</span>
+                  <span class="stat-sub">Percentage reduction</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Shannon Entropy</span>
+                  <span class="stat-value" id="statEntropy">-</span>
+                  <span class="stat-sub">Theoretical minimum limit</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Unique Symbols</span>
+                  <span class="stat-value" id="statUniqueChars">-</span>
+                  <span class="stat-sub">Leaf nodes in tree</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Bitstream Padding</span>
+                  <span class="stat-value" id="statPaddingBits">-</span>
+                  <span class="stat-sub">Trailing alignment bits</span>
+                </div>
+              </div>
+
+              <div class="bitstream-section mt-3">
+                <label class="section-label">Raw Binary &amp; Hex Stream Preview:</label>
+                <div id="bitstreamPreview" class="bitstream-container">
+                  <span class="text-muted">Compress text to inspect bitstream bytes...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Frequency & Code Table -->
+        <div class="card mt-4">
+          <div class="card-header">
+            <div>
+              <h2>3. Character Frequency &amp; Generated Prefix Codes</h2>
+              <p class="card-desc">Click any row to trace and highlight its exact path in the Huffman Tree!</p>
+            </div>
+            <div class="table-search-box">
+              <input type="text" id="tableSearch" placeholder="🔍 Search character...">
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Character</th>
+                    <th>ASCII / Byte</th>
+                    <th>Frequency</th>
+                    <th>Huffman Binary Code</th>
+                    <th>Bit Length</th>
+                    <th>Net Bits Saved</th>
+                  </tr>
+                </thead>
+                <tbody id="codeTableBody">
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-4">No data yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: DECOMPRESS -->
+      <section id="decompressTab" class="tab-pane">
+        <div class="card max-w-700 mx-auto">
+          <div class="card-header">
+            <h2>Decompress .huff File</h2>
+            <span class="badge badge-blue">Reversible Lossless</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted">
+              Upload a <code>.huff</code> file previously generated by this compressor. The decoder will extract the header, reconstruct the exact same Huffman Tree using the Min-Heap, decode the bitstream, and recover the 100% original text.
+            </p>
+
+            <div class="drop-zone mt-3" id="decompressDropZone">
+              <span class="drop-icon">📦</span>
+              <p>Drag &amp; drop a <strong>.huff</strong> file here, or <label for="decompressFileInput" class="link-label">browse file</label></p>
+              <input type="file" id="decompressFileInput" accept=".huff" style="display: none;">
+            </div>
+
+            <div id="decompressFileInfo" class="mt-2"></div>
+
+            <div class="btn-row mt-3">
+              <button id="btnDecompress" class="btn btn-primary" disabled>
+                🔓 Decompress Archive
+              </button>
+              <button id="btnDownloadDecompressed" class="btn btn-success" disabled>
+                ⬇️ Download Recovered File
+              </button>
+            </div>
+
+            <div id="decompressStats" class="alert-box mt-3" style="display: none;"></div>
+
+            <div class="form-group mt-3">
+              <label for="decompressedOutput">Decompressed Text Preview:</label>
+              <textarea id="decompressedOutput" rows="8" readonly placeholder="Decompressed contents will appear here..."></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: VISUALIZER -->
+      <section id="visualizerTab" class="tab-pane">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Interactive Huffman Tree Explorer</h2>
+              <p class="card-desc">Left branch = <code>0</code>, Right branch = <code>1</code>. Blue nodes are characters (leaves); dark nodes are combined frequency sums.</p>
+            </div>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-dot dot-leaf"></span> Leaf (Character)</span>
+              <span class="legend-item"><span class="legend-dot dot-internal"></span> Internal Node</span>
+              <span class="legend-item"><span class="legend-dot dot-highlight"></span> Selected / Highlighted</span>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="treeContainer" class="tree-viewport"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: THEORY & VIVA GUIDE -->
+      <section id="theoryTab" class="tab-pane">
+        <div class="theory-grid">
+          <!-- Step by step -->
+          <div class="card">
+            <div class="card-header">
+              <h2>📚 How Huffman Coding Works (Step-by-Step)</h2>
+            </div>
+            <div class="card-body">
+              <div class="timeline">
+                <div class="timeline-step">
+                  <div class="step-num">1</div>
+                  <div class="step-content">
+                    <h4>Frequency Analysis (Hash Map)</h4>
+                    <p>Scan the input string/bytes and tally occurrences of each unique character using a Hash Map in $O(N)$ time.</p>
+                  </div>
+                </div>
+
+                <div class="timeline-step">
+                  <div class="step-num">2</div>
+                  <div class="step-content">
+                    <h4>Priority Queue Initialization (Min-Heap)</h4>
+                    <p>Create a leaf node for each character. Insert all $K$ leaf nodes into a Min-Heap ordered by frequency in $O(K \log K)$ time.</p>
+                  </div>
+                </div>
+
+                <div class="timeline-step">
+                  <div class="step-num">3</div>
+                  <div class="step-content">
+                    <h4>Greedy Tree Construction</h4>
+                    <p>While the heap has more than one node:</p>
+                    <ul>
+                      <li>Extract the two lowest-frequency nodes ($L$ and $R$).</li>
+                      <li>Create a new internal node with frequency = $freq(L) + freq(R)$.</li>
+                      <li>Set $L$ as left child and $R$ as right child.</li>
+                      <li>Insert the parent node back into the Min-Heap.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="timeline-step">
+                  <div class="step-num">4</div>
+                  <div class="step-content">
+                    <h4>Prefix Code Assignment</h4>
+                    <p>Traverse the resulting binary tree from the root. Traversing left appends <code>0</code>; traversing right appends <code>1</code>. Leaf paths define each character's unique prefix-free binary code.</p>
+                  </div>
+                </div>
+
+                <div class="timeline-step">
+                  <div class="step-num">5</div>
+                  <div class="step-content">
+                    <h4>Bit Packing &amp; Header Serialization</h4>
+                    <p>Map each original character to its binary code. Pack bits 8-at-a-time into true binary bytes. Prepend the frequency table header and padding bit count so the file can be decompressed anywhere.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Complexity Box -->
+          <div class="card">
+            <div class="card-header">
+              <h2>⚡ Complexity Analysis</h2>
+            </div>
+            <div class="card-body">
+              <table class="simple-table">
+                <thead>
+                  <tr>
+                    <th>Phase</th>
+                    <th>Time Complexity</th>
+                    <th>Space Complexity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Frequency Count</strong></td>
+                    <td><code>O(N)</code></td>
+                    <td><code>O(K)</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Min-Heap Tree Build</strong></td>
+                    <td><code>O(K log K)</code></td>
+                    <td><code>O(K)</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Code Generation</strong></td>
+                    <td><code>O(K)</code></td>
+                    <td><code>O(K)</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Encoding Bitstream</strong></td>
+                    <td><code>O(N)</code></td>
+                    <td><code>O(N)</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Decoding Bitstream</strong></td>
+                    <td><code>O(N)</code></td>
+                    <td><code>O(N)</code></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="text-sm text-muted mt-2">
+                * Where $N$ is total number of characters, and $K$ is number of unique characters ($K \le 256$ for ASCII/byte streams).
+              </p>
+            </div>
+          </div>
+
+          <!-- Viva Cheat Sheet -->
+          <div class="card grid-full-width">
+            <div class="card-header">
+              <h2>🎯 Top 5 Viva / Interview Questions &amp; Answers</h2>
+              <span class="badge badge-purple">Viva Preparation</span>
+            </div>
+            <div class="card-body faq-grid">
+              <div class="faq-card">
+                <h4>Q1: What does "prefix-free code" mean, and why is it crucial?</h4>
+                <p><strong>Answer:</strong> A code is prefix-free if no character's binary code is a prefix of another character's code (e.g., if 'A' is <code>01</code>, no other code can start with <code>01...</code>). This ensures unambiguous decoding without needing any spaces or delimiters between bits.</p>
+              </div>
+
+              <div class="faq-card">
+                <h4>Q2: Why use a Min-Heap instead of a sorted array?</h4>
+                <p><strong>Answer:</strong> When we extract the two smallest elements and push their sum back, an array would take $O(K)$ time per insertion to stay sorted (total $O(K^2)$). A Min-Heap extracts and inserts in $O(\log K)$, reducing overall tree construction to $O(K \log K)$.</p>
+              </div>
+
+              <div class="faq-card">
+                <h4>Q3: Why is Huffman Coding called a "Greedy Algorithm"?</h4>
+                <p><strong>Answer:</strong> At each step of tree construction, it makes a locally optimal choice by immediately merging the two smallest available frequencies. This local greedy choice mathematically leads to a globally optimal prefix tree.</p>
+              </div>
+
+              <div class="faq-card">
+                <h4>Q4: How does the decompressor handle bit padding?</h4>
+                <p><strong>Answer:</strong> Computers store data in 8-bit bytes. If the compressed bitstream is 45 bits, it requires 6 bytes (48 bits), leaving 3 unused padding bits in the final byte. Our file header explicitly records the number of padding bits (e.g., 3) so the decompressor ignores them.</p>
+              </div>
+
+              <div class="faq-card">
+                <h4>Q5: Can Huffman compression ever make a file larger?</h4>
+                <p><strong>Answer:</strong> Yes! For tiny files or high-entropy files (e.g., already compressed JPEGs, encrypted files, or text where every character is unique with frequency 1), the size of the frequency header plus bit alignment can exceed the few bits saved.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Data Structures &amp; Algorithms Project • Built with <strong>Min-Heap</strong>, <strong>Binary Trees</strong>, <strong>Lossless Bitstream Packing</strong>, and <strong>Interactive SVG</strong></p>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/app.js"></script>
+</body>
+</html>
