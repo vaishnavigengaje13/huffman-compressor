@@ -855,10 +855,10 @@ textarea:focus {
                   ⚡ Compress Now
                 </button>
                 <button id="btnDownloadCompressed" class="btn btn-success" disabled>
-                  ⬇️ Download Lossless .huff Archive
+                  ⬇️ Download Lossless Archive
                 </button>
               </div>
-              <p class="help-text">Decompress the .huff file to restore your original file. PDFs and other already-compressed files may not get smaller.</p>
+              <p class="help-text">Downloads a .huff or .gz archive, whichever is smaller. Decompress it to restore your original file and extension.</p>
             </div>
           </div>
 
@@ -961,8 +961,8 @@ textarea:focus {
 
             <div class="drop-zone mt-3" id="decompressDropZone">
               <span class="drop-icon">📦</span>
-              <p>Drag &amp; drop a <strong>.huff</strong> archive or a PDF exported by this app, or <label for="decompressFileInput" class="link-label">browse file</label></p>
-              <input type="file" id="decompressFileInput" accept=".huff,.pdf,application/pdf" style="display: none;">
+              <p>Drag &amp; drop a <strong>.huff</strong> or <strong>.gz</strong> archive, or a PDF exported by an older version of this app, or <label for="decompressFileInput" class="link-label">browse file</label></p>
+              <input type="file" id="decompressFileInput" accept=".huff,.gz,.pdf,application/gzip,application/pdf" style="display: none;">
             </div>
 
             <div id="decompressFileInfo" class="mt-2"></div>
@@ -1882,6 +1882,7 @@ class TreeVisualizer {
 let lastCompressionResult = null;
 let lastDecompressionResult = null;
 let currentCompressedBlob = null;
+let currentArchiveFormat = 'huff';
 let currentDecompressedBlob = null;
 let originalFileName = 'sample.txt';
 let treeVisualizer = null;
@@ -2009,7 +2010,8 @@ function initCompressSection() {
 
   downloadBtn.addEventListener('click', () => {
     if (!currentCompressedBlob) return;
-    downloadBlob(currentCompressedBlob, `${originalFileName}.huff`);
+    const archiveExtension = currentArchiveFormat === 'gzip' ? '.gz' : '.huff';
+    downloadBlob(currentCompressedBlob, `${originalFileName}${archiveExtension}`);
   });
 
   const tableSearch = document.getElementById('tableSearch');
@@ -2052,7 +2054,7 @@ function executeCompression() {
   executeCompressionWithBytes(inputBytes);
 }
 
-function executeCompressionWithBytes(inputBytes) {
+async function executeCompressionWithBytes(inputBytes) {
   try {
     const startTime = performance.now();
     const result = HuffmanCodec.compress(inputBytes);
@@ -2060,13 +2062,30 @@ function executeCompressionWithBytes(inputBytes) {
 
     lastCompressionResult = result;
     currentCompressedBlob = new Blob([result.compressedBytes], { type: 'application/octet-stream' });
+    currentArchiveFormat = 'huff';
+
+    // GZIP often compresses document formats better than a standalone Huffman pass.
+    // Select the smaller lossless archive so PDFs do not grow unnecessarily.
+    if ('CompressionStream' in window) {
+      try {
+        const gzipStream = new Blob([inputBytes]).stream().pipeThrough(new CompressionStream('gzip'));
+        const gzipBlob = await new Response(gzipStream).blob();
+        if (gzipBlob.size < currentCompressedBlob.size) {
+          currentCompressedBlob = gzipBlob;
+          currentArchiveFormat = 'gzip';
+        }
+      } catch (error) {
+        console.warn('GZIP fallback unavailable; using the Huffman archive.', error);
+      }
+    }
 
     document.getElementById('statOriginalSize').textContent = formatBytes(result.originalSize);
-    document.getElementById('statCompressedSize').textContent = formatBytes(result.compressedSize);
+    document.getElementById('statCompressedSize').textContent = formatBytes(currentCompressedBlob.size);
 
     const ratioElem = document.getElementById('statRatio');
-    const ratioVal = parseFloat(result.compressionRatio);
-    ratioElem.textContent = `${result.compressionRatio}%`;
+    const selectedRatio = ((1 - (currentCompressedBlob.size / result.originalSize)) * 100).toFixed(2);
+    const ratioVal = parseFloat(selectedRatio);
+    ratioElem.textContent = `${selectedRatio}%`;
     ratioElem.className = `stat-value ${ratioVal >= 0 ? 'text-success' : 'text-danger'}`;
 
     document.getElementById('statEntropy').textContent = `${result.entropy} bits/sym`;
@@ -2099,14 +2118,20 @@ function initDecompressSection() {
   let decompressFileName = 'recovered.txt';
 
   function handleFile(file) {
-    decompressFileName = file.name.replace(/(?:-compressed)?\.pdf$/i, '').replace(/\.huff$/i, '') || 'recovered.txt';
+    decompressFileName = file.name.replace(/\.gz$/i, '').replace(/\.huff$/i, '').replace(/(?:-compressed)?\.pdf$/i, '') || 'recovered.txt';
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const uploadedBytes = new Uint8Array(e.target.result);
       try {
-        selectedCompressedBytes = file.name.toLowerCase().endsWith('.pdf')
-          ? extractArchiveFromPdf(uploadedBytes)
-          : uploadedBytes;
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          selectedCompressedBytes = extractArchiveFromPdf(uploadedBytes);
+        } else if (file.name.toLowerCase().endsWith('.gz')) {
+          if (!('DecompressionStream' in window)) throw new Error('GZIP decompression is not supported by this browser.');
+          const gzipStream = new Blob([uploadedBytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+          selectedCompressedBytes = new Uint8Array(await new Response(gzipStream).arrayBuffer());
+        } else {
+          selectedCompressedBytes = uploadedBytes;
+        }
       } catch (error) {
         selectedCompressedBytes = null;
         decompressBtn.disabled = true;

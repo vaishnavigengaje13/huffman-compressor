@@ -10,6 +10,8 @@ An end-to-end, browser-based Data Structures and Algorithms (DSA) project implem
    - Not just string simulations—actually packs 8 bits into binary bytes (`Uint8Array`, `ArrayBuffer`).
    - Self-contained file format with custom magic bytes (`HUFF`), padding bit preservation, and serialized frequency header.
    - Decompress any `.huff` archive back into the exact original file with zero data loss.
+   - Download `.huff` or GZIP `.gz` archives, choosing whichever is smaller; decompressing restores the original bytes and filename extension.
+   - Already-compressed formats such as PDFs may not shrink with Huffman alone, so the GZIP fallback is used when it produces a smaller archive.
 
 2. **Interactive Huffman Tree Visualizer**:
    - Dynamic SVG hierarchical tree layout.
