@@ -2279,51 +2279,144 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function createArchivePdf(archiveBlob, archiveName, originalText) {
+async function createArchivePdf(archiveBlob, archiveName, originalText) {
   const filename = archiveName.replace(/[^\x20-\x7E]|[()\\]/g, '_');
-  return archiveBlob.arrayBuffer().then(buffer => {
-    const archive = new Uint8Array(buffer);
-    const lines = originalText === null
-      ? ['This file is binary and is preserved unchanged in the attached compressed archive.', 'Use this website\'s Decompress File tab to restore the original file.']
-      : originalText.replace(/\r\n?/g, '\n').split('\n').flatMap(line => line.match(/.{1,88}|^$/g) || ['']);
-    const pageLines = [];
-    for (let i = 0; i < lines.length; i += 55) pageLines.push(lines.slice(i, i + 55));
-    if (pageLines.length === 0) pageLines.push(['']);
-    const escapePdfText = text => text.replace(/[^\x20-\x7E]/g, '?').replace(/[\\()]/g, '\\$&');
-    const objects = new Array(2 + pageLines.length * 2 + 2);
-    const fileSpecRef = objects.length - 1;
-    const embeddedRef = objects.length;
-    const pageRefs = pageLines.map((_, i) => 3 + i * 2);
-    objects[0] = `<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(${filename}) ${fileSpecRef} 0 R] >> >> /AF [${fileSpecRef} 0 R] >>`;
-    objects[1] = `<< /Type /Pages /Kids [${pageRefs.map(ref => `${ref} 0 R`).join(' ')}] /Count ${pageRefs.length} >>`;
-    pageLines.forEach((linesOnPage, i) => {
-      const pageRef = pageRefs[i];
-      const contentRef = pageRef + 1;
-      objects[pageRef - 1] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >> /Contents ${contentRef} 0 R >>`;
-      const content = `BT /F1 9 Tf 45 755 Td 11 TL ${linesOnPage.map(line => `(${escapePdfText(line)}) Tj T*`).join(' ')} ET`;
-      objects[contentRef - 1] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
-    });
-    objects[fileSpecRef - 1] = `<< /Type /Filespec /F (${filename}) /UF (${filename}) /EF << /F ${embeddedRef} 0 R >> >>`;
-    objects[embeddedRef - 1] = `<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Length ${archive.length} /HuffmanArchive true >>\nstream\n`;
-    let pdf = '%PDF-1.7\n%âãÏÓ\n';
-    const offsets = [0];
-    for (let i = 0; i < objects.length; i++) {
-      offsets.push(pdf.length);
-      pdf += `${i + 1} 0 obj\n${objects[i]}`;
-      if (i === 5) {
-        for (let j = 0; j < archive.length; j++) pdf += String.fromCharCode(archive[j]);
-        pdf += '\nendstream';
+  const archive = new Uint8Array(await archiveBlob.arrayBuffer());
+  const displayText = originalText === null
+    ? 'This file is binary and is preserved unchanged in the attached compressed archive.\nUse this website’s Decompress File tab to restore the original file.'
+    : originalText;
+
+  // Render text as a page image so Unicode is not replaced by '?' in PDF fonts.
+  // Attach the exact UTF-8 source and compressed archive for lossless recovery.
+  const canvas = document.createElement('canvas');
+  canvas.width = 1224;
+  canvas.height = 1584;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not create a PDF page for the original text.');
+  ctx.font = '18px "Fira Code", "Consolas", "Courier New", monospace';
+  const maxWidth = 1044;
+  const segmenter = typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+  const wrappedLines = [];
+  for (const sourceLine of displayText.split(/\r\n|\n|\r/)) {
+    const line = sourceLine.replace(/\t/g, '    ');
+    let current = '';
+    const characters = segmenter
+      ? Array.from(segmenter.segment(line), part => part.segment)
+      : Array.from(line);
+    for (const character of characters) {
+      const candidate = current + character;
+      if (current && ctx.measureText(candidate).width > maxWidth) {
+        wrappedLines.push(current);
+        current = character;
+      } else {
+        current = candidate;
       }
-      pdf += '\nendobj\n';
     }
-    const xrefOffset = pdf.length;
-    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-    for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
-    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-    const bytes = new Uint8Array(pdf.length);
-    for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 255;
-    return new Blob([bytes], { type: 'application/pdf' });
+    wrappedLines.push(current);
+  }
+
+  const pageLines = [];
+  for (let i = 0; i < wrappedLines.length; i += 54) {
+    pageLines.push(wrappedLines.slice(i, i + 54));
+  }
+  if (pageLines.length === 0) pageLines.push(['']);
+
+  const pageImages = [];
+  for (const lines of pageLines) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '18px "Fira Code", "Consolas", "Courier New", monospace';
+    ctx.fillStyle = '#111827';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, i) => ctx.fillText(line, 90, 84 + i * 26));
+    const jpegBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.98));
+    if (!jpegBlob) throw new Error('Could not render a PDF page for the original text.');
+    pageImages.push(new Uint8Array(await jpegBlob.arrayBuffer()));
+  }
+
+  const objects = [null, null];
+  const addTextObject = text => {
+    objects.push({ text });
+    return objects.length;
+  };
+  const addStreamObject = (dictionary, bytes) => {
+    objects.push({
+      before: `<< ${dictionary} /Length ${bytes.length} >>\nstream\n`,
+      stream: bytes,
+      after: '\nendstream'
+    });
+    return objects.length;
+  };
+  const pageRefs = [];
+  pageImages.forEach(imageBytes => {
+    const imageRef = addStreamObject(
+      `/Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`,
+      imageBytes
+    );
+    const content = 'q 612 0 0 792 0 0 cm /Im0 Do Q';
+    const contentRef = addTextObject(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    pageRefs.push(addTextObject(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 ${imageRef} 0 R >> >> /Contents ${contentRef} 0 R >>`
+    ));
   });
+
+  const archiveRef = addStreamObject(
+    '/Type /EmbeddedFile /Subtype /application#2Foctet-stream /HuffmanArchive true', archive
+  );
+  const archiveFileSpec = addTextObject(
+    `<< /Type /Filespec /F (${filename}) /UF (${filename}) /EF << /F ${archiveRef} 0 R >> >>`
+  );
+  const fileSpecs = [`(${filename}) ${archiveFileSpec} 0 R`];
+  const associatedFiles = [`${archiveFileSpec} 0 R`];
+  if (originalText !== null) {
+    const textFilename = filename.replace(/\.huff$/i, '') + '.txt';
+    const originalBytes = new TextEncoder().encode(originalText);
+    const textRef = addStreamObject('/Type /EmbeddedFile /Subtype /text#2Fplain', originalBytes);
+    const textFileSpec = addTextObject(
+      `<< /Type /Filespec /F (${textFilename}) /UF (${textFilename}) /EF << /F ${textRef} 0 R >> >>`
+    );
+    fileSpecs.push(`(${textFilename}) ${textFileSpec} 0 R`);
+    associatedFiles.push(`${textFileSpec} 0 R`);
+  }
+
+  objects[0] = { text: `<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [${fileSpecs.join(' ')}] >> >> /AF [${associatedFiles.join(' ')}] >>` };
+  objects[1] = { text: `<< /Type /Pages /Kids [${pageRefs.map(ref => `${ref} 0 R`).join(' ')}] /Count ${pageRefs.length} >>` };
+
+  const encoder = new TextEncoder();
+  const ascii = value => {
+    const bytes = new Uint8Array(value.length);
+    for (let i = 0; i < value.length; i++) bytes[i] = value.charCodeAt(i) & 0xff;
+    return bytes;
+  };
+  const chunks = [];
+  let byteLength = 0;
+  const append = bytes => {
+    chunks.push(bytes);
+    byteLength += bytes.length;
+  };
+  append(ascii('%PDF-1.7\n%'));
+  append(new Uint8Array([0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(byteLength);
+    append(ascii(`${index + 1} 0 obj\n`));
+    if (object.stream) {
+      append(ascii(object.before));
+      append(object.stream);
+      append(ascii(object.after));
+    } else {
+      append(encoder.encode(object.text));
+    }
+    append(ascii('\nendobj\n'));
+  });
+  const xrefOffset = byteLength;
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i < offsets.length; i++) xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  append(ascii(xref));
+  return new Blob(chunks, { type: 'application/pdf' });
 }
 
 function extractArchiveFromPdf(pdfBytes) {
