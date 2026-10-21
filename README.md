@@ -46,19 +46,19 @@ An end-to-end, browser-based Data Structures and Algorithms (DSA) project implem
 
 ```text
 huffman-compressor/
-├── index.html              # Responsive Single-Page Application
-├── css/
-│   └── styles.css          # Developer-focused dark UI with CSS variables & responsive layout
-├── js/
-│   ├── app.js              # Full standalone controller (MinHeap, HuffmanCodec, Visualizer, UI)
-│   ├── minheap.js          # Modular Min-Heap implementation (ES6 module)
-│   ├── huffman.js          # Modular Huffman Codec & bitstream serializer (ES6 module)
-│   └── treeVisualizer.js   # Modular SVG Tree Visualizer (ES6 module)
-├── test_huffman.py         # Automated Python test suite for algorithm verification
-├── server.py               # Local Python HTTP server (auto-opens browser)
-├── run.bat                 # 1-click Windows launcher
-└── README.md               # Project documentation & presentation guide
+├── index.html              # Complete single-file website (HTML, CSS, and JavaScript)
+├── app.js                  # JavaScript controller source
+├── styles.css              # Stylesheet source
+├── huffman.js              # Huffman codec source
+├── minheap.js              # Min-heap source
+├── treeVisualizer.js       # SVG tree visualizer source
+├── test_huffman.py         # Python tests for the Huffman algorithm
+├── server.py               # Optional local Python web server
+├── run.bat                 # Windows launcher for the local server
+└── README.md               # Project documentation
 ```
+
+`index.html` is self-contained and is the entry point for static hosting. The separate `app.js` and `styles.css` files are source copies; the hosted page does not need to fetch them.
 
 ---
 
@@ -83,6 +83,16 @@ Then visit `http://localhost:8000` in your browser.
 
 ---
 
+## 🌐 Publish with GitHub Pages
+
+The website is a static page and does not require a backend to run on GitHub Pages.
+
+1. Keep `index.html` in the repository root (this folder).
+2. In the repository, open **Settings → Pages**.
+3. Under **Build and deployment**, choose **Deploy from a branch**, then select the `main` branch and `/ (root)` folder.
+4. Save and open the Pages URL shown on that settings page.
+
+GitHub Pages serves the self-contained `index.html`; the Python server and Windows batch files are only for local use.
 ## 🎤 How to Explain This Project in an Interview or Viva
 
 ### The 30-Second Elevator Pitch
