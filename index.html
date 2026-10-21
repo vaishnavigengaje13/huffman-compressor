@@ -841,8 +841,15 @@ textarea:focus {
             <div class="card-body">
               <div class="drop-zone" id="compressDropZone">
                 <span class="drop-icon">📄</span>
-                <p>Drag &amp; drop any text/code file here, or <label for="compressFileInput" class="link-label">browse files</label></p>
-                <input type="file" id="compressFileInput" style="display: none;">
+                <p>Drag &amp; drop a PDF or text/code file here, or <label for="compressFileInput" class="link-label">browse files</label></p>
+                <input type="file" id="compressFileInput" accept=".pdf,application/pdf,.txt,.text,.md,.csv,.json,.xml,.html,.css,.js,.py" style="display: none;">
+              </div>
+
+              <div id="pdfCompressPanel" class="form-group mt-3" style="display:none;">
+                <label>PDF compression</label>
+                <p id="pdfInputInfo" class="help-text"></p>
+                <p class="help-text">Lossless optimization keeps the PDF pages and their content intact. Results depend on how the original PDF was created; some PDFs are already compressed and may not get smaller.</p>
+                <div id="pdfCompressStatus" class="alert-box" style="display:none;"></div>
               </div>
 
               <div class="form-group mt-3">
@@ -855,10 +862,10 @@ textarea:focus {
                   ⚡ Compress Now
                 </button>
                 <button id="btnDownloadCompressed" class="btn btn-success" disabled>
-                  ⬇️ Download Lossless Archive
+                  ⬇️ Download Compressed File
                 </button>
               </div>
-              <p class="help-text">Downloads a .huff or .gz archive, whichever is smaller. Decompress it to restore your original file and extension.</p>
+              <p id="compressHelpText" class="help-text">Text and code files download as a .huff or .gz archive. PDFs are optimized and downloaded as valid .pdf files.</p>
             </div>
           </div>
 
@@ -871,14 +878,14 @@ textarea:focus {
             <div class="card-body">
               <div class="stats-grid">
                 <div class="stat-card">
-                  <span class="stat-label">Original Size</span>
+                  <span class="stat-label" id="statOriginalLabel">Original Size</span>
                   <span class="stat-value" id="statOriginalSize">-</span>
                   <span class="stat-sub">8 bits/char (ASCII/UTF-8)</span>
                 </div>
                 <div class="stat-card">
-                  <span class="stat-label">Compressed Size</span>
+                  <span class="stat-label" id="statCompressedLabel">Compressed Size</span>
                   <span class="stat-value" id="statCompressedSize">-</span>
-                  <span class="stat-sub">Includes binary header</span>
+                  <span class="stat-sub" id="statCompressedSub">Includes binary header</span>
                 </div>
                 <div class="stat-card">
                   <span class="stat-label">Space Saved</span>
@@ -1157,6 +1164,7 @@ textarea:focus {
   </div>
 
   <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script>
 /**
  * ====================================================================
@@ -1883,6 +1891,7 @@ let lastCompressionResult = null;
 let lastDecompressionResult = null;
 let currentCompressedBlob = null;
 let currentArchiveFormat = 'huff';
+let selectedPdfFile = null;
 let currentDecompressedBlob = null;
 let originalFileName = 'sample.txt';
 let treeVisualizer = null;
@@ -1960,6 +1969,10 @@ function initPresets() {
     btn.addEventListener('click', () => {
       const presetKey = btn.dataset.preset;
       if (PRESETS[presetKey]) {
+        selectedPdfFile = null;
+        document.getElementById('pdfCompressPanel').style.display = 'none';
+        document.getElementById('btnCompress').textContent = '⚡ Compress Now';
+        document.getElementById('btnDownloadCompressed').textContent = '⬇️ Download Compressed File';
         document.getElementById('textInput').value = PRESETS[presetKey];
         originalFileName = `${presetKey}.txt`;
         executeCompression();
@@ -1982,7 +1995,8 @@ function initCompressSection() {
   const downloadBtn = document.getElementById('btnDownloadCompressed');
 
   compressBtn.addEventListener('click', () => {
-    executeCompression();
+    if (selectedPdfFile) executePdfCompression(selectedPdfFile);
+    else executeCompression();
   });
 
   dropZone.addEventListener('dragover', (e) => {
@@ -2008,8 +2022,25 @@ function initCompressSection() {
     }
   });
 
+  document.getElementById('textInput').addEventListener('input', () => {
+    if (!selectedPdfFile) return;
+    selectedPdfFile = null;
+    document.getElementById('pdfCompressPanel').style.display = 'none';
+    document.getElementById('statOriginalLabel').textContent = 'Original Size';
+    document.getElementById('statCompressedLabel').textContent = 'Compressed Size';
+    document.getElementById('statCompressedSub').textContent = 'Includes binary header';
+    document.getElementById('btnCompress').textContent = '⚡ Compress Now';
+    document.getElementById('btnDownloadCompressed').textContent = '⬇️ Download Compressed File';
+    document.getElementById('btnDownloadCompressed').disabled = true;
+    document.getElementById('compressHelpText').textContent = 'Text and code files download as a .huff or .gz archive. PDFs are optimized and downloaded as valid .pdf files.';
+  });
+
   downloadBtn.addEventListener('click', () => {
     if (!currentCompressedBlob) return;
+    if (selectedPdfFile) {
+      downloadBlob(currentCompressedBlob, `${originalFileName.replace(/\.pdf$/i, '')}-compressed.pdf`);
+      return;
+    }
     const archiveExtension = currentArchiveFormat === 'gzip' ? '.gz' : '.huff';
     downloadBlob(currentCompressedBlob, `${originalFileName}${archiveExtension}`);
   });
@@ -2024,6 +2055,33 @@ function initCompressSection() {
 
 function handleFileInputForCompression(file) {
   originalFileName = file.name;
+  selectedPdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? file : null;
+  const pdfPanel = document.getElementById('pdfCompressPanel');
+  const textInput = document.getElementById('textInput');
+  const compressButton = document.getElementById('btnCompress');
+  const downloadButton = document.getElementById('btnDownloadCompressed');
+  const helpText = document.getElementById('compressHelpText');
+  if (selectedPdfFile) {
+    pdfPanel.style.display = 'block';
+    document.getElementById('pdfInputInfo').textContent = `${file.name} · ${formatBytes(file.size)}`;
+    document.getElementById('pdfCompressStatus').style.display = 'none';
+    textInput.value = '';
+    compressButton.textContent = '⚡ Compress PDF';
+    downloadButton.textContent = '⬇️ Download Compressed PDF';
+    downloadButton.disabled = true;
+    helpText.textContent = 'The optimized result is saved as a PDF. Your file is processed in this browser.';
+    document.getElementById('statOriginalLabel').textContent = 'Original PDF Size';
+    document.getElementById('statCompressedLabel').textContent = 'Output PDF Size';
+    document.getElementById('statCompressedSub').textContent = 'Valid PDF download';
+    return;
+  }
+  pdfPanel.style.display = 'none';
+  compressButton.textContent = '⚡ Compress Now';
+  downloadButton.textContent = '⬇️ Download Compressed File';
+  helpText.textContent = 'Text and code files download as a .huff or .gz archive. PDFs are optimized and downloaded as valid .pdf files.';
+  document.getElementById('statOriginalLabel').textContent = 'Original Size';
+  document.getElementById('statCompressedLabel').textContent = 'Compressed Size';
+  document.getElementById('statCompressedSub').textContent = 'Includes binary header';
   const reader = new FileReader();
 
   reader.onload = (e) => {
@@ -2041,6 +2099,48 @@ function handleFileInputForCompression(file) {
   };
 
   reader.readAsArrayBuffer(file);
+}
+
+async function executePdfCompression(file) {
+  const status = document.getElementById('pdfCompressStatus');
+  const compressButton = document.getElementById('btnCompress');
+  const downloadButton = document.getElementById('btnDownloadCompressed');
+  if (!window.PDFLib || !window.PDFLib.PDFDocument) {
+    status.style.display = 'block';
+    status.textContent = 'The PDF optimizer could not load. Check your internet connection and refresh the page.';
+    return;
+  }
+  compressButton.disabled = true;
+  downloadButton.disabled = true;
+  compressButton.textContent = '⏳ Optimizing PDF…';
+  status.style.display = 'block';
+  status.textContent = 'Optimizing your PDF in this browser…';
+  try {
+    const originalBytes = new Uint8Array(await file.arrayBuffer());
+    const pdfDoc = await PDFLib.PDFDocument.load(originalBytes, { ignoreEncryption: false });
+    const optimizedBytes = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
+    const bestBytes = optimizedBytes.byteLength < originalBytes.byteLength ? optimizedBytes : originalBytes;
+    currentCompressedBlob = new Blob([bestBytes], { type: 'application/pdf' });
+    currentArchiveFormat = 'pdf';
+    const saved = file.size - bestBytes.byteLength;
+    const percent = file.size ? Math.max(0, (saved / file.size) * 100).toFixed(1) : '0.0';
+    status.textContent = saved > 0
+      ? `Done · ${formatBytes(file.size)} → ${formatBytes(bestBytes.byteLength)} · saved ${formatBytes(saved)} (${percent}%). Download your compressed PDF below.`
+      : `Done · this PDF is already as small as this lossless optimizer can make it (${formatBytes(file.size)}). The download remains a valid PDF with the original content.`;
+    document.getElementById('statOriginalSize').textContent = formatBytes(file.size);
+    document.getElementById('statCompressedSize').textContent = formatBytes(bestBytes.byteLength);
+    document.getElementById('statRatio').textContent = `${percent}%`;
+    document.getElementById('statEntropy').textContent = 'PDF';
+    document.getElementById('statUniqueChars').textContent = '—';
+    document.getElementById('statPaddingBits').textContent = '—';
+    downloadButton.disabled = false;
+  } catch (error) {
+    console.error('PDF optimization failed:', error);
+    status.textContent = `Could not optimize this PDF: ${error.message || 'unsupported or damaged file'}`;
+  } finally {
+    compressButton.disabled = false;
+    compressButton.textContent = '⚡ Compress PDF';
+  }
 }
 
 function executeCompression() {

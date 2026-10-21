@@ -6,26 +6,32 @@ An end-to-end, browser-based Data Structures and Algorithms (DSA) project implem
 
 ## 🌟 Key Features
 
-1. **True Binary Compression & Decompression (`.huff`)**:
+1. **PDF optimization and lossless file compression**:
+   - Upload a PDF, choose **Compress PDF**, then download a standards-based `-compressed.pdf` file.
+   - PDF optimization runs in the browser with pdf-lib and rewrites the PDF using compressed object streams. Page content is retained; if the rewritten PDF is larger, the app returns the original PDF instead.
+   - This is a lossless structural optimization. It does not resample PDF images, so already-optimized or image-heavy PDFs may show little or no size reduction. The result reports the actual size change.
+   - The PDF feature loads pdf-lib from jsDelivr, so it needs an internet connection. The document itself is processed locally in the browser and is not uploaded by the app.
+
+2. **True Binary Compression & Decompression (`.huff`)**:
    - Not just string simulations—actually packs 8 bits into binary bytes (`Uint8Array`, `ArrayBuffer`).
    - Self-contained file format with custom magic bytes (`HUFF`), padding bit preservation, and serialized frequency header.
    - Decompress any `.huff` archive back into the exact original file with zero data loss.
    - Download `.huff` or GZIP `.gz` archives, choosing whichever is smaller; decompressing restores the original bytes and filename extension.
    - Already-compressed formats such as PDFs may not shrink with Huffman alone, so the GZIP fallback is used when it produces a smaller archive.
 
-2. **Interactive Huffman Tree Visualizer**:
+3. **Interactive Huffman Tree Visualizer**:
    - Dynamic SVG hierarchical tree layout.
    - Displays branch bits: **Left = `0`**, **Right = `1`**.
    - **Click-to-Trace**: Click any character in the frequency table to trace and highlight its exact path from root to leaf!
    - Pan (drag with mouse) and smooth zoom controls.
 
-3. **Real-Time Analytics & Information Theory**:
+4. **Real-Time Analytics & Information Theory**:
    - Original vs Compressed file size.
    - Compression ratio (% reduction).
    - Shannon Entropy calculation ($H(X)$) showing the theoretical minimum bits per symbol.
    - Live hexadecimal and binary bitstream previews.
 
-4. **Built-in Viva & Interview Defense Guide**:
+5. **Built-in Viva & Interview Defense Guide**:
    - Embedded explanations, complexity breakdowns, and answers to common examiner questions directly in the web UI.
 
 ---
@@ -67,7 +73,7 @@ huffman-compressor/
 ## 🚀 How to Run the Website
 
 ### Option 1: Direct File Open (Zero Install)
-Simply double-click `index.html` or open it directly in any web browser (Chrome, Edge, Firefox, Brave, Safari). It works completely offline with zero installation.
+Simply double-click `index.html` or open it directly in a modern browser. Text/Huffman compression works offline; PDF optimization requires an internet connection to load pdf-lib.
 
 ### Option 2: 1-Click Windows Launcher
 Double-click `run.bat`. It will start a local server and automatically open the application in your browser at `http://localhost:8000`.
