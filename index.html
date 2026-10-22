@@ -846,9 +846,9 @@ textarea:focus {
               </div>
 
               <div id="pdfCompressPanel" class="form-group mt-3" style="display:none;">
-                <label>PDF compression</label>
+                <label>PDF compression · output remains a PDF</label>
                 <p id="pdfInputInfo" class="help-text"></p>
-                <p class="help-text">Lossless optimization keeps the PDF pages and their content intact. Results depend on how the original PDF was created; some PDFs are already compressed and may not get smaller.</p>
+                <p class="help-text">The downloaded file stays a PDF and keeps its page content. The app reports the actual size change; if safe optimization cannot make it smaller, it keeps the original PDF.</p>
                 <div id="pdfCompressStatus" class="alert-box" style="display:none;"></div>
               </div>
 
@@ -2126,7 +2126,7 @@ async function executePdfCompression(file) {
     const percent = file.size ? Math.max(0, (saved / file.size) * 100).toFixed(1) : '0.0';
     status.textContent = saved > 0
       ? `Done · ${formatBytes(file.size)} → ${formatBytes(bestBytes.byteLength)} · saved ${formatBytes(saved)} (${percent}%). Download your compressed PDF below.`
-      : `Done · this PDF is already as small as this lossless optimizer can make it (${formatBytes(file.size)}). The download remains a valid PDF with the original content.`;
+      : `Done · safe optimization did not reduce this PDF (${formatBytes(file.size)}). The download stays a PDF and uses the original file so its content is preserved.`;
     document.getElementById('statOriginalSize').textContent = formatBytes(file.size);
     document.getElementById('statCompressedSize').textContent = formatBytes(bestBytes.byteLength);
     document.getElementById('statRatio').textContent = `${percent}%`;
